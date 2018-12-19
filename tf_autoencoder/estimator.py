@@ -30,10 +30,6 @@ def _create_estimator_spec_from_logits(labels, logits, learning_rate, mode, hpar
         return tf.estimator.EstimatorSpec(
             mode=mode,
             predictions=predictions)
-    if hparams.is_l2_normed:
-        labels = tf.nn.l2_normalize(labels, axis=2)
-        logits = tf.nn.l2_normalize(logits, axis=2)
-
 
     tf.losses.sigmoid_cross_entropy(labels, logits)
     total_loss = tf.losses.get_total_loss(add_regularization_losses=is_training)
