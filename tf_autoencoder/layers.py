@@ -163,24 +163,61 @@ def conv2d_fixed_padding(inputs,
 
     return net
 
-
-def conv_encoder(inputs, num_filters, scope=None):
+def conv_encoder(inputs, num_filters, scope=None, hparams=None):
     net = inputs
+    last_conv_shape=None
+    last_flatten_shape=None
     with tf.variable_scope(scope, 'encoder', [inputs]):
-        tf.assert_rank(inputs, 4)
+        #tf.assert_rank(inputs, 4)
         for layer_id, num_outputs in enumerate(num_filters):
             with tf.variable_scope('block{}'.format(layer_id)):
                 net = slim.repeat(net, 2, conv2d_fixed_padding, num_outputs=num_outputs)
                 net = tf.contrib.layers.max_pool2d(net)
+        last_conv_shape = get_formatted_shape(net)
+        net = tf.contrib.layers.flatten(net)
+        last_flatten_shape = get_formatted_shape(net)
+        for item in hparams.dense_layers.split(","):
+            _item = item.split(':')
+            index = int(_item[0].strip())
+            size = int(_item[1].strip())
+            if index > 1:
+                if hparams.dropout is not None:
+                    net = slim.dropout(net, scope=scope)
+            net = tf.layers.dense(net, size)
 
+        # flatten, dense layer
         net = tf.identity(net, name='output')
-    return net
+    return net, last_conv_shape, last_flatten_shape
 
-
-def conv_decoder(inputs, num_filters, output_shape, scope=None):
+def get_formatted_shape(tensor):
+    new_shape=[]
+    for i, shape in enumerate(list(tensor.get_shape())):
+        if i == 0:
+            new_shape.append(-1)
+        else:
+            new_shape.append(int(shape))
+    return new_shape
+def conv_decoder(inputs, num_filters, output_shape, scope=None, last_conv_shape=None, last_flatten_shape=None, hparams=None):
     net = inputs
     with tf.variable_scope(scope, 'decoder', [inputs]):
-        tf.assert_rank(inputs, 4)
+        # if dense_dim is None:
+        #     tf.assert_rank(inputs, 4)
+        # else:
+        # net = tf.layers.dense(net, last_flatten_shape[1])
+        # net = tf.reshape(net, last_conv_shape)
+        for i, item in enumerate(reversed(hparams.dense_layers.split(","))):
+            # already encoded therefore skipped the first one
+            if i == 0:
+                continue
+            _item = item.split(':')
+            index = int(_item[0].strip())
+            size = int(_item[1].strip())
+            if index > 1:
+                if hparams.dropout is not None:
+                    net = slim.dropout(net, scope=scope)
+            net = tf.layers.dense(net, size)
+        net = tf.layers.dense(net, last_flatten_shape[1])
+        net = tf.reshape(net, last_conv_shape)
         for layer_id, units in enumerate(num_filters):
             with tf.variable_scope('block_{}'.format(layer_id),
                                    values=(net,)):
@@ -213,7 +250,7 @@ def conv_decoder(inputs, num_filters, output_shape, scope=None):
     return net
 
 
-def convolutional_autoencoder(inputs, num_filters, activation_fn, dropout, weight_decay, mode, scope=None):
+def convolutional_autoencoder(inputs, num_filters, activation_fn, dropout, weight_decay, mode, scope=None, hparams=None):
     """Create autoencoder with 2D convolution layers.
 
     Parameters
@@ -241,21 +278,25 @@ def convolutional_autoencoder(inputs, num_filters, activation_fn, dropout, weigh
         Output of the decoder's reconstruction layer.
     """
     data_format = "NHWC"
-    if data_format == "NHWC":
-        shape = [-1, 28, 28, 1]
-    elif data_format == "NCHW":
-        shape = [-1, 1, 28, 28]
-    else:
-        raise ValueError("unknown data_format {}".format(data_format))
+    # if data_format == "NHWC":
+    #     shape = [-1, 144, 1024, 1]
+    #     #shape = [-1, 28, 28, 1]
+    # elif data_format == "NCHW":
+    #     shape = [-1, 1, 28, 28]
+    # else:
+    #     raise ValueError("unknown data_format {}".format(data_format))
 
     with tf.variable_scope(scope, 'ConvAutoEnc', [inputs]):
         with slim.arg_scope(
                 autoencoder_arg_scope(activation_fn, dropout, weight_decay, data_format, mode)):
 
-            net = tf.reshape(inputs, shape)
-            net = conv_encoder(net, num_filters)
-            net = conv_decoder(net, num_filters[::-1], shape)
-
-            net = tf.reshape(net, [-1, 28 * 28])
+            input_shape = get_formatted_shape(inputs) #[-1, 28 * 28]
+            #net = tf.reshape(inputs, shape)
+            net = tf.expand_dims(inputs, axis=3)
+            net, last_conv_shape, last_flatten_shape = conv_encoder(net, num_filters, hparams=hparams)
+            input_shape.append(1)
+            net = conv_decoder(net, num_filters[::-1], input_shape, last_conv_shape=last_conv_shape, last_flatten_shape=last_flatten_shape, hparams=hparams)
+            input_shape.remove(1)
+            net = tf.reshape(net, input_shape)
 
     return net

@@ -3,7 +3,7 @@ import tensorflow as tf
 from .layers import fully_connected_autoencoder, convolutional_autoencoder
 
 
-def _create_estimator_spec_from_logits(labels, logits, learning_rate, mode):
+def _create_estimator_spec_from_logits(labels, logits, learning_rate, mode, hparams=None):
     """Add loss function and create estimator spec.
 
     Parameters
@@ -30,6 +30,10 @@ def _create_estimator_spec_from_logits(labels, logits, learning_rate, mode):
         return tf.estimator.EstimatorSpec(
             mode=mode,
             predictions=predictions)
+    if hparams.is_l2_normed:
+        labels = tf.nn.l2_normalize(labels, axis=2)
+        logits = tf.nn.l2_normalize(logits, axis=2)
+
 
     tf.losses.sigmoid_cross_entropy(labels, logits)
     total_loss = tf.losses.get_total_loss(add_regularization_losses=is_training)
@@ -135,7 +139,7 @@ class ConvolutionalAutoencoder(tf.estimator.Estimator):
     """
 
     def __init__(self, num_filters, activation_fn=tf.nn.relu,
-                 dropout=None, weight_decay=1e-5, learning_rate=0.001, model_dir=None, config=None):
+                 dropout=None, weight_decay=1e-5, learning_rate=0.001, model_dir=None, config=None, hparams=None):
         def _model_fn(features, labels, mode):
             # Define model's architecture
             logits = convolutional_autoencoder(inputs=features,
@@ -143,12 +147,14 @@ class ConvolutionalAutoencoder(tf.estimator.Estimator):
                                                activation_fn=activation_fn,
                                                dropout=dropout,
                                                weight_decay=weight_decay,
-                                               mode=mode)
+                                               mode=mode,
+                                               hparams=hparams)
             return _create_estimator_spec_from_logits(
                 labels=labels,
                 logits=logits,
                 learning_rate=learning_rate,
-                mode=mode)
+                mode=mode,
+                hparams=hparams)
 
         super(ConvolutionalAutoencoder, self).__init__(
             model_fn=_model_fn,

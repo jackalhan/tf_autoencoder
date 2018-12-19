@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+import argparse
 from tf_autoencoder.cli import create_train_parser
 from tf_autoencoder.hooks import PrintParameterSummary, SaveReconstructionListener
 from tf_autoencoder.inputs import MNISTReconstructionDataset
@@ -7,14 +7,15 @@ from tf_autoencoder.estimator import AutoEncoder, ConvolutionalAutoencoder
 
 # Show debugging output
 tf.logging.set_verbosity(tf.logging.INFO)
-
+number_of_filters = None
 
 def create_conv_model(run_config, hparams):
-    return ConvolutionalAutoencoder(num_filters=[16, 8, 8],
+    return ConvolutionalAutoencoder(num_filters=hparams.number_of_filters, #[16, 8, 8]
                                     dropout=hparams.dropout,
                                     weight_decay=hparams.weight_decay,
                                     learning_rate=hparams.learning_rate,
-                                    config=run_config)
+                                    config=run_config,
+                                    hparams=hparams)
 
 
 def create_fc_model(run_config, hparams):
@@ -27,9 +28,10 @@ def create_fc_model(run_config, hparams):
 
 def create_experiment(run_config, hparams):
     data = MNISTReconstructionDataset(hparams.data_dir,
-                                      noise_factor=hparams.noise_factor)
+                                      noise_factor=hparams.noise_factor, number_of_tokens=hparams.number_of_tokens)
     train_input_fn = data.get_train_input_fn(hparams.batch_size, hparams.num_epochs)
     eval_input_fn = data.get_eval_input_fn(hparams.batch_size)
+    hparams.number_of_filters = UTIL.extract_number_of_filters(args.number_of_filters)
 
     if hparams.model == 'fully_connected':
         estimator = create_fc_model(run_config, hparams)
@@ -49,7 +51,7 @@ def create_experiment(run_config, hparams):
 
     saver_hook = tf.train.CheckpointSaverHook(
         estimator._model_dir,
-        save_steps=data.mnist.train.num_examples // hparams.batch_size,
+        save_steps=data.train.shape[0]// hparams.batch_size,
         listeners=listeners)
 
     train_monitors = [
@@ -73,8 +75,8 @@ def create_experiment(run_config, hparams):
 
 
 def run_train(args=None):
-    parser = create_train_parser()
-    args = parser.parse_args(args=args)
+    # parser = create_train_parser()
+    # args = parser.parse_args(args=args)
 
     # Define model parameters
     params = tf.contrib.training.HParams(
@@ -86,7 +88,12 @@ def run_train(args=None):
         weight_decay=args.weight_decay,
         learning_rate=args.learning_rate,
         num_epochs=args.epochs,
-        batch_size=args.batch_size)
+        batch_size=args.batch_size,
+        number_of_filters=args.number_of_filters,
+        is_l2_normed=args.is_l2_normed,
+        number_of_tokens=args.number_of_tokens,
+        dense_layers=args.dense_layers
+    )
 
     # Set the run_config and the directory to save the model and stats
     run_config = tf.contrib.learn.RunConfig(
@@ -101,9 +108,14 @@ def run_train(args=None):
     )
 
 
+
 if __name__ == '__main__':
     # avoid printing duplicate log messages
     import logging
-    logging.getLogger('tensorflow').propagate = False
+    import common_parser as UTIL
 
-    run_train()
+    logging.getLogger('tensorflow').propagate = False
+    args = UTIL.get_parser().parse_args()
+    # global number_of_filters
+    run_train(args)
+

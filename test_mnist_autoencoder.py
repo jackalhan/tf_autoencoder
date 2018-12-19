@@ -3,21 +3,23 @@ import numpy as np
 import math
 import tensorflow as tf
 import matplotlib.pyplot as plt
-
+import argparse
 from tf_autoencoder.cli import create_test_parser
 from tf_autoencoder.embeddings import get_tensor_output, save_as_embedding
 from tf_autoencoder.img_utils import write_sprite_image
 from tf_autoencoder.inputs import MNISTReconstructionDataset
 from tf_autoencoder.estimator import AutoEncoder, ConvolutionalAutoencoder
-
+import h5py
+import os
 # Show debugging output
 tf.logging.set_verbosity(tf.logging.INFO)
 
 
 def create_conv_model(args):
-    return ConvolutionalAutoencoder(num_filters=[16, 8, 8],
+    number_of_filters = UTIL.extract_number_of_filters(args.number_of_filters)
+    return ConvolutionalAutoencoder(num_filters=number_of_filters,
                                     dropout=args.dropout,
-                                    model_dir=args.model_dir)
+                                    model_dir=args.model_dir, hparams=args)
 
 
 def create_fc_model(args):
@@ -27,8 +29,8 @@ def create_fc_model(args):
 
 
 def run_test(args=None):
-    parser = create_test_parser()
-    args = parser.parse_args(args=args)
+    # parser = create_test_parser()
+    # args = parser.parse_args(args=args)
 
     if args.model == 'fully_connected':
         pred_estimator = create_fc_model(args)
@@ -39,9 +41,9 @@ def run_test(args=None):
     else:
         raise ValueError('unknown model {}'.format(args.model))
 
-    n_images = args.images
-    data = MNISTReconstructionDataset(args.data_dir, args.noise_factor)
-    test_input_fn = data.get_test_input_fn(n_images)
+    #n_images = args.images
+    data = MNISTReconstructionDataset(args.data_dir, args.noise_factor, args.number_of_tokens)
+    test_input_fn = data.get_test_input_fn(args.batch_size)
 
     if args.what == 'reconstruction':
         is_denoising = args.noise_factor > 0
@@ -51,22 +53,32 @@ def run_test(args=None):
         embedding_labels = join(args.model_dir, 'embedding', 'labels.csv')
 
         embedding_data = get_tensor_output(
-            pred_estimator, test_input_fn, encoder_output)[:n_images]
+            pred_estimator, test_input_fn, encoder_output)#[:n_images]
         tf.logging.info('Writing embedding of shape %s to %s',
                         embedding_data.shape, embedding_ckpt)
 
-        save_as_embedding(embedding_data,
-                          embedding_ckpt,
-                          metadata_path='./labels.csv',
-                          sprite_image_path='./images.png')
+        dump_embeddings(embedding_data, os.path.join(args.data_dir, 'predicted_embeddings.hdf5'))
 
-        embedding_sprites = join(args.model_dir, 'embedding', 'images.png')
-        write_sprite_image(data.mnist.test.images, [28, 28], embedding_sprites)
+        #
+        # save_as_embedding(embedding_data,
+        #                   embedding_ckpt,
+        #                   metadata_path='./labels.csv',
+        #                   sprite_image_path='./images.png')
+        #
+        # embedding_sprites = join(args.model_dir, 'embedding', 'images.png')
+        # write_sprite_image(data.mnist.test.images, [28, 28], embedding_sprites)
+        #
+        # np.savetxt(embedding_labels,
+        #            data.mnist.test.labels[:n_images],
+        #            fmt='%d')
 
-        np.savetxt(embedding_labels,
-                   data.mnist.test.labels[:n_images],
-                   fmt='%d')
-
+def dump_embeddings(embeddings, outfile_to_dump, dtype="float32"):
+    with h5py.File(outfile_to_dump, 'w') as fout:
+        ds = fout.create_dataset(
+            'embeddings',
+            embeddings.shape, dtype=dtype,
+            data=embeddings
+        )
 
 def get_images(input_fn):
     with tf.Graph().as_default():
@@ -103,10 +115,10 @@ def show_reconstructed_images(pred_estimator, input_fn, n_images, is_denoising):
 
     plt.show()
 
-
 if __name__ == '__main__':
     # avoid printing duplicate log messages
     import logging
+    import common_parser as UTIL
     logging.getLogger('tensorflow').propagate = False
-
-    run_test()
+    args = UTIL.get_parser().parse_args()
+    run_test(args)

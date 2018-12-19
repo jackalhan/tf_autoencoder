@@ -1,7 +1,17 @@
 from abc import abstractmethod, ABCMeta
-
+import os
 import tensorflow as tf
 from tensorflow.examples.tutorials.mnist import input_data as mnist_data
+import h5py
+
+class generator:
+    def __init__(self, file, table_name='embeddings'):
+        self.file = file
+        self.table_name = table_name
+    def __call__(self):
+        with h5py.File(self.file, 'r') as hf:
+            for im in hf[self.table_name]:
+                yield im
 
 
 class IteratorInitializerHook(tf.train.SessionRunHook):
@@ -172,10 +182,12 @@ class MNISTReconstructionDataset:
         autoencoder will be trained.
     """
 
-    def __init__(self, data_dir, noise_factor=0.0):
-        self.mnist = mnist_data.read_data_sets(data_dir, one_hot=False)
+    def __init__(self, data_dir, noise_factor=0.0, number_of_tokens=None):
+        #self.mnist = mnist_data.read_data_sets(data_dir, one_hot=False)
         self.noise_factor = noise_factor
-        self.feature_columns = tf.feature_column.numeric_column('x', shape=(784,))
+        self.data_dir = data_dir
+        self.number_of_tokens = number_of_tokens
+        #self.feature_columns = tf.feature_column.numeric_column('x', shape=(784,))
 
     def _input_fn_corrupt(self, data, batch_size, num_epochs, mode, scope):
         f = MNISTReconstructionInputFunction(data, batch_size, num_epochs,
@@ -183,18 +195,43 @@ class MNISTReconstructionDataset:
         if self.noise_factor > 0:
             return CorruptedInputDecorator(f, noise_factor=self.noise_factor)
         return f
-
+    def _slice_number_of_tokens(self, data):
+        if self.number_of_tokens is None:
+            return data
+        return  data.take(indices=range(0, self.number_of_tokens), axis=1)
     def get_train_input_fn(self, batch_size, num_epochs):
-        return self._input_fn_corrupt(self.mnist.train.images, batch_size, num_epochs,
+        #ds = self._read_dataset(os.path.join(self.data_dir, "train_question_embeddings.hdf5"))
+        self.train = self.load_embeddings(os.path.join(self.data_dir, "train_embeddings.hdf5"))
+        self.train = self._slice_number_of_tokens(self.train)
+        #self.train = self.mnist.train.images
+        return self._input_fn_corrupt(self.train, batch_size, num_epochs,
                                       tf.estimator.ModeKeys.TRAIN,
                                       'training_data')
 
     def get_eval_input_fn(self, batch_size):
-        return self._input_fn_corrupt(self.mnist.validation.images, batch_size, None,
+        self.eval = self.load_embeddings(os.path.join(self.data_dir, "test_embeddings.hdf5"))
+        self.eval = self._slice_number_of_tokens(self.eval)
+        #self.eval = self.mnist.validation.images
+        return self._input_fn_corrupt(self.eval, batch_size, None,
                                       tf.estimator.ModeKeys.EVAL,
                                       'validation_data')
 
     def get_test_input_fn(self, batch_size):
-        return self._input_fn_corrupt(self.mnist.test.images, batch_size, None,
+        self.test = self.load_embeddings(os.path.join(self.data_dir, "embeddings.hdf5"))
+        self.test = self._slice_number_of_tokens(self.test)
+        #self.test = self.mnist.test.images
+        return self._input_fn_corrupt(self.test, batch_size, None,
                                       tf.estimator.ModeKeys.PREDICT,
                                       'test_data')
+
+    def _read_dataset(self, file_path, table_name='embeddings', data_type=tf.float32):
+        ds = tf.data.Dataset.from_generator(
+            generator(file_path, table_name),
+            data_type,
+            tf.TensorShape([150, 1024, ]))
+        return ds
+
+    def load_embeddings(self, infile_to_get):
+        with h5py.File(infile_to_get, 'r') as fin:
+            document_embeddings = fin['embeddings'][...]
+        return document_embeddings
