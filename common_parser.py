@@ -19,7 +19,7 @@ def get_parser():
         '--noise_factor', type=float, default=0.4,
         help='Amount of noise to add to input (default: 0)')
     parser.add_argument(
-        '--dropout', type=float, default=None,
+        '--dropout', type=float, default=0.5,
         help='The probability that each element is kept in dropout layers (default: 1)')
 
     parser.add_argument(

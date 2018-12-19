@@ -1,0 +1,1 @@
+python train_mnist_autoencoder.py  --model_dir="./text_training" --data_dir="./text_data" --number_of_filters="16,8,8"  --dense_layers="1:1024,2:512" --number_of_tokens=40 --is_l2_normed=True --batch_size=32
