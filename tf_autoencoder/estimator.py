@@ -15,15 +15,15 @@ def pairwise_euclidean_distances(A, B):
     """
     with tf.variable_scope('pairwise_euclidean_dist'):
         # squared norms of each row in A and B
-        na = tf.reduce_sum(tf.square(A), 1)
-        nb = tf.reduce_sum(tf.square(B), 1)
+        na = tf.reduce_sum(tf.square(A), 2)
+        nb = tf.reduce_sum(tf.square(B), 2)
 
         # na as a row and nb as a co"lumn vectors
-        na = tf.reshape(na, [-1, 1])
-        nb = tf.reshape(nb, [1, -1])
+        na = tf.expand_dims(na, 2)
+        nb = tf.expand_dims(nb, 1)
 
         # return pairwise euclidead difference matrix
-        D = tf.sqrt(tf.maximum(na - 2 * tf.matmul(A, B, False, True) + nb, 0.0))
+        D = tf.reduce_mean(tf.reduce_sum(tf.reduce_sum(tf.sqrt(tf.maximum(na - 2 * tf.matmul(A, B, False, True) + nb, 0.0)),axis=1), axis=1))
     return D
 
 def distance_loss(embeddings_origin, embedding_generated):
@@ -92,7 +92,7 @@ def _create_estimator_spec_from_logits(labels, logits, learning_rate, mode, hpar
             loss=total_loss,
             optimizer="Adam",
             learning_rate=learning_rate,
-            learning_rate_decay_fn=lambda lr, gs: tf.train.exponential_decay(lr, gs, 1000, 0.96, staircase=True),
+            #learning_rate_decay_fn=lambda lr, gs: tf.train.exponential_decay(lr, gs, 1000, 0.96, staircase=True),
             global_step=tf.train.get_global_step(),
             summaries=["learning_rate", "global_gradient_norm"])
 
@@ -103,7 +103,8 @@ def _create_estimator_spec_from_logits(labels, logits, learning_rate, mode, hpar
     elif mode == tf.estimator.ModeKeys.EVAL:
         if hparams.loss == 'custom_distance_loss':
             eval_metric_ops = {
-                "nan":tf.metrics.mean(0)
+                "rmse": tf.metrics.root_mean_squared_error(
+                    tf.cast(labels, tf.float64), tf.cast(probs, tf.float64))
             }
         else:
             eval_metric_ops = {

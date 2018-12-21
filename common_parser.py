@@ -2,10 +2,10 @@ import argparse
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        '--model_dir', default='./mnist_training',
+        '--model_dir', default='./text_training',
         help='Output directory for model and training stats.')
     parser.add_argument(
-        '--data_dir', default='./mnist_data',
+        '--data_dir', default='./text_data',
         help='Directory to download the data to.')
     parser.add_argument('--model', default='convolutional')
     parser.add_argument('--number_of_filters', default="16,8,8")
@@ -13,18 +13,18 @@ def get_parser():
     parser.add_argument('--number_of_tokens', default=144, type=int)
     parser.add_argument('--is_l2_normed', default=True, type=str2bool)
     parser.add_argument(
-        '--batch_size', type=int, default=2,
+        '--batch_size', type=int, default=64,
         help='Batch size (default: 256)')
     parser.add_argument(
-        '--noise_factor', type=float, default=0.4,
+        '--noise_factor', type=float, default=0.5,
         help='Amount of noise to add to input (default: 0)')
     parser.add_argument(
-        '--dropout', type=float, default=None,
+        '--dropout', type=float, default=0.5,
         help='The probability that each element is kept in dropout layers (default: 1)')
     parser.add_argument(
         '--loss', type=str, default="custom_distance_loss")
     parser.add_argument(
-        '--learning_rate', type=float, default=0.00001,
+        '--learning_rate', type=float, default=0.001,
         help='Learning rate (default: 0.001)')
     parser.add_argument(
         '--epochs', type=int, default=50,
