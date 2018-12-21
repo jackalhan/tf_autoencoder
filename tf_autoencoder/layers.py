@@ -169,8 +169,6 @@ def conv_encoder(inputs, num_filters, scope=None, hparams=None):
     last_flatten_shape=None
     with tf.variable_scope(scope, 'encoder', [inputs]):
         #tf.assert_rank(inputs, 4)
-        if hparams.is_l2_normed:
-            net = tf.nn.l2_normalize(net, axis=2)
         for layer_id, num_outputs in enumerate(num_filters):
             with tf.variable_scope('block{}'.format(layer_id)):
                 net = slim.repeat(net, 2, conv2d_fixed_padding, num_outputs=num_outputs)
@@ -247,8 +245,7 @@ def conv_decoder(inputs, num_filters, output_shape, scope=None, last_conv_shape=
                     slice_size.append(sout)
 
             net = tf.slice(net, slice_beg, slice_size)
-        if hparams.is_l2_normed:
-            net = tf.nn.l2_normalize(net, axis=2)
+
         net = tf.identity(net, name='output')
 
     return net

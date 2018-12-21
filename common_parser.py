@@ -21,7 +21,8 @@ def get_parser():
     parser.add_argument(
         '--dropout', type=float, default=None,
         help='The probability that each element is kept in dropout layers (default: 1)')
-
+    parser.add_argument(
+        '--loss', type=str, default="custom_distance_loss")
     parser.add_argument(
         '--learning_rate', type=float, default=0.00001,
         help='Learning rate (default: 0.001)')

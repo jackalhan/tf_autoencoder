@@ -92,7 +92,8 @@ def run_train(args=None):
         number_of_filters=args.number_of_filters,
         is_l2_normed=args.is_l2_normed,
         number_of_tokens=args.number_of_tokens,
-        dense_layers=args.dense_layers
+        dense_layers=args.dense_layers,
+        loss=args.loss
     )
 
     # Set the run_config and the directory to save the model and stats

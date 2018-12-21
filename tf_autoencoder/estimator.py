@@ -3,6 +3,47 @@ import tensorflow as tf
 from .layers import fully_connected_autoencoder, convolutional_autoencoder
 
 
+
+def pairwise_euclidean_distances(A, B):
+    """
+    Computes pairwise distances between each elements of A and each elements of B.
+    Args:
+      A,    [m,d] matrix
+      B,    [n,d] matrix
+    Returns:
+      D,    [m,n] matrix of pairwise distances
+    """
+    with tf.variable_scope('pairwise_euclidean_dist'):
+        # squared norms of each row in A and B
+        na = tf.reduce_sum(tf.square(A), 1)
+        nb = tf.reduce_sum(tf.square(B), 1)
+
+        # na as a row and nb as a co"lumn vectors
+        na = tf.reshape(na, [-1, 1])
+        nb = tf.reshape(nb, [1, -1])
+
+        # return pairwise euclidead difference matrix
+        D = tf.sqrt(tf.maximum(na - 2 * tf.matmul(A, B, False, True) + nb, 0.0))
+    return D
+
+def distance_loss(embeddings_origin, embedding_generated):
+    """Build the triplet loss over a batch of question and paragraph embeddings.
+
+    For each anchor, we get the hardest positive and hardest negative to form a triplet.
+
+    Args:
+        ....
+
+    Returns:
+        triplet_loss: scalar tensor containing the triplet loss
+    """
+    # Get the pairwise distance matrix between question and paragraphs
+    pairwise_dist = pairwise_euclidean_distances(embeddings_origin, embedding_generated)
+
+    loss = tf.reduce_mean(pairwise_dist)
+
+    return loss
+
 def _create_estimator_spec_from_logits(labels, logits, learning_rate, mode, hparams=None):
     """Add loss function and create estimator spec.
 
@@ -31,8 +72,18 @@ def _create_estimator_spec_from_logits(labels, logits, learning_rate, mode, hpar
             mode=mode,
             predictions=predictions)
 
-    tf.losses.sigmoid_cross_entropy(labels, logits)
-    total_loss = tf.losses.get_total_loss(add_regularization_losses=is_training)
+    # paragraph_embedding_mean_norm = tf.reduce_mean(tf.norm(paragraph, axis=1))
+    if hparams.loss == 'custom_distance_loss':
+        labels = tf.nn.l2_normalize(labels, axis=2)
+        logits = tf.nn.l2_normalize(logits, axis=2)
+        _loss = distance_loss(labels, logits)
+        tf.losses.add_loss(_loss)
+        total_loss = tf.losses.get_total_loss()
+    else:
+        tf.losses.sigmoid_cross_entropy(labels, logits)
+        total_loss = tf.losses.get_total_loss(add_regularization_losses=is_training)
+
+    #raise ValueError("Loss strategy not recognized: {}".format(hparams.loss))
 
     train_op = None
     eval_metric_ops = None
@@ -50,10 +101,15 @@ def _create_estimator_spec_from_logits(labels, logits, learning_rate, mode, hpar
             tf.summary.histogram(var.op.name, var)
 
     elif mode == tf.estimator.ModeKeys.EVAL:
-        eval_metric_ops = {
-            "rmse": tf.metrics.root_mean_squared_error(
-                tf.cast(labels, tf.float64), tf.cast(probs, tf.float64))
-        }
+        if hparams.loss == 'custom_distance_loss':
+            eval_metric_ops = {
+                "nan":tf.metrics.mean(0)
+            }
+        else:
+            eval_metric_ops = {
+                "rmse": tf.metrics.root_mean_squared_error(
+                    tf.cast(labels, tf.float64), tf.cast(probs, tf.float64))
+            }
 
     # Provide an estimator spec for `ModeKeys.EVAL` and `ModeKeys.TRAIN` modes.
     return tf.estimator.EstimatorSpec(
